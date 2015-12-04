@@ -1,20 +1,17 @@
 <master>
-<!-- <property name="title">@title;noquote@</property>-->
-<property name="title">@title;noquote@</property>
-<property name="doc(title)">@title;noquote@</property>
-<property name="context">@context;noquote@</property>
-<property name="header_stuff">
+<property name="doc(title)">@title;literal@</property>
+<property name="context">@context;literal@</property>
 <style>
 pre.code {
         font-size: 80%;
         font-family: courier, monospace;
-        PADDING-RIGHT: 10px;
-        PADDING-LEFT: 10px;
-        PADDING-BOTTOM: 10px;
-        PADDING-TOP: 10px;
-        BORDER: #cccccc 1px solid;
-        BACKGROUND-COLOR: #eeeeee;
-        MARGIN-BOTTOM: 15px;
+        padding-right: 10px;
+        padding-left: 10px;
+        padding-bottom: 10px;
+        padding-top: 10px;
+        border: #cccccc 1px solid;
+        background-color: #eeeeee;
+        margin-bottom: 15px;
 }
 pre em {
         font-family: cursive;
@@ -38,9 +35,14 @@ pre it {
 
 <h1 class="page-title">@title;noquote@</h1>
 <if @class_hierarchy@ not nil>
-<img style='float: right; max-width: 800px;' src='./show-class-graph?classes=@class_hierarchy@&documented_only=@documented_only@'>
+<if @svg@ not nil>
+@svg;literal@
 </if>
-@output;noquote@
+<else>
+<img style='float: right; max-width: 800px;' src='./show-class-graph?classes=@class_hierarchy@&amp;documented_only=@documented_only@'>
+</else>
+</if>
+@output;literal@
 
 <hr>
 <div style='font-size: 70%'>

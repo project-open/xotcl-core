@@ -5,7 +5,7 @@ ad_page_contract {
   @creation-date Oct 23, 2005
   @cvs-id $Id$
 } {
-  page_id:integer,notnull
+  page_id:naturalnum,notnull
   {name ""}
 } -properties {
   name:onevalue
@@ -97,3 +97,9 @@ db_multirow -unclobber -extend {
   set author_link [acs_community_member_link -user_id $author_id -label $author]
 }
 
+
+# Local variables:
+#    mode: tcl
+#    tcl-indent-level: 2
+#    indent-tabs-mode: nil
+# End:

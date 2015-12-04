@@ -19,6 +19,11 @@ aa_register_case -cats {api smoke} check_xotcl {
 
   ? {expr {$::xotcl::version < 1.5}} 0 "XOTcl Version $::xotcl::version >= 1.5"
 
+  ? {expr {$::tcl_version < 8.5}} 0 "Tcl Version $::tcl_version >= 8.5.4"
+  if {[regexp {8[.]5[.]([0-9]+)$} $::tcl_patchLevel _ minor]} {
+    ? {expr {$minor < 4}} 0 "Tcl Version $::tcl_patchLevel >= 8.5.4"
+  }
+
   set ns_cache_version_old [catch {ns_cache names util_memoize xxx}]
   if {$ns_cache_version_old} {
     ? {set x old} new "upgrade ns_cache: cvs -z3 -d:pserver:anonymous@aolserver.cvs.sourceforge.net:/cvsroot/aolserver co nscache"
@@ -36,3 +41,8 @@ aa_register_case -cats {api smoke} check_xotcl {
   }
   
 }
+# Local variables:
+#    mode: tcl
+#    tcl-indent-level: 2
+#    indent-tabs-mode: nil
+# End:
