@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<message_catalog package_key="xotcl-core" locale="nl_NL" charset="ISO-8859-1">
+
+  <msg key="add">Toevoegen %type%</msg>
+  <msg key="add_item">Toevoegen item</msg>
+  <msg key="add_long">Toevoegen nieuw item van het type %type%</msg>
+  <msg key="create_new_type">Maken nieuw %type%</msg>
+  <msg key="delete_item">Verwijder item</msg>
+  <msg key="edit_item">Bewerk item</msg>
+  <msg key="edit_type">Bewerk %type%</msg>
+  <msg key="has_entered_the_room">is de kamer binnegetreden</msg>
+  <msg key="live_revision">Live revisie</msg>
+  <msg key="permission_denied">Toegang gewijgerd</msg>
+  <msg key="policy-error-insufficient_permissions">&lt;blockquote&gt; U heeft onvoldoende rechten om deze methode %method% uit te voeren op object%object%. &lt;/blockquote&gt;</msg>
+  <msg key="revisions">Revisies</msg>
+  <msg key="view_item">Toon item</msg>
+</message_catalog>
