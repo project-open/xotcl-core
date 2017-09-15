@@ -1,6 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <message_catalog package_key="xotcl-core" locale="pl_PL" charset="utf-8">
 
+  <msg key="add">Dodaj %type%</msg>
+  <msg key="add_item">Dodaj element</msg>
+  <msg key="add_long">Dodaj nowy element typu %type%</msg>
+  <msg key="create_new_type">Utwórz nowy %type%</msg>
+  <msg key="delete_item">Usuń element</msg>
+  <msg key="edit_item">Edytuj element</msg>
+  <msg key="edit_type">Edytuj %type%</msg>
+  <msg key="has_entered_the_room">wszedł do pokoju</msg>
+  <msg key="live_revision">Wersja produkcyjna</msg>
   <msg key="No_Data">Brak danych</msg>
+  <msg key="nobody">Gość</msg>
+  <msg key="permission_denied">Brak uprawnień</msg>
+  <msg key="policy-error-insufficient_permissions">&lt;blockquote&gt; Nie masz dostatecznych uprawnień aby wykonać %method% na obiekcie %object%. &lt;/blockquote&gt;</msg>
+  <msg key="revision_title">Wersje wpisu</msg>
   <msg key="revisions">Wersje</msg>
+  <msg key="view_item">Wyświewtl element</msg>
 </message_catalog>

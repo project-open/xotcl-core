@@ -4,7 +4,10 @@
   <msg key="add">Neu: %type%</msg>
   <msg key="add_item">Neues Item</msg>
   <msg key="add_long">Neue Seite vom Type %type% erzeugen</msg>
-  <msg key="edit_item">Editieren</msg>
+  <msg key="create_new_type">Neuer %type%</msg>
+  <msg key="delete_item">Element löschen</msg>
+  <msg key="edit_item">Bearbeiten</msg>
+  <msg key="edit_type">%type% bearbeiten</msg>
   <msg key="has_entered_the_room">has entered the room</msg>
   <msg key="live_revision">Aktuelle Version</msg>
   <msg key="No_Data">Keine Daten</msg>
