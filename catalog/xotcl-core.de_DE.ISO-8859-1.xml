@@ -18,4 +18,5 @@ Sie haben keine ausreichende Berechtigung, um die Methode %method% am Objekt %ob
 &lt;/blockquote&gt;</msg>
   <msg key="revision_title">Versionen des Eintrags</msg>
   <msg key="revisions">Verlauf</msg>
+  <msg key="view_item">Element ansehen</msg>
 </message_catalog>
