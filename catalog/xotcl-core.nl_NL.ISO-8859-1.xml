@@ -10,8 +10,11 @@
   <msg key="edit_type">Bewerk %type%</msg>
   <msg key="has_entered_the_room">is de kamer binnegetreden</msg>
   <msg key="live_revision">Live revisie</msg>
+  <msg key="No_Data">Geen data</msg>
+  <msg key="nobody">Gast</msg>
   <msg key="permission_denied">Toegang gewijgerd</msg>
   <msg key="policy-error-insufficient_permissions">&lt;blockquote&gt; U heeft onvoldoende rechten om deze methode %method% uit te voeren op object%object%. &lt;/blockquote&gt;</msg>
+  <msg key="revision_title">Revisies</msg>
   <msg key="revisions">Revisies</msg>
   <msg key="view_item">Toon item</msg>
 </message_catalog>
