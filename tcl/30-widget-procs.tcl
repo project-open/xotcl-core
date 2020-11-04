@@ -1,5 +1,5 @@
 ::xo::library doc {
-  XOTcl HTML Widget Classes based on tdom
+  XOTcl HTML Widget Classes based on tDOM
 
   @author Gustaf Neumann (neumann@wu-wien.ac.at)
   @author Neophytos Demetriou (k2pts@phigita.net)
@@ -109,7 +109,7 @@ namespace eval ::xo::tdom {
     #
     # autorendering means that after creating an ordered composite,
     # the topmost element is automatically rendered. This makes
-    # the ::xo::tdom classes behave more like plain tdom commands.
+    # the ::xo::tdom classes behave more like plain tDOM commands.
     #
     #my log "tdom AUTO $level [$me autorender]"
 
@@ -124,7 +124,7 @@ namespace eval ::xo::tdom {
   }
 
   #
-  # The tdom attribute manager makes it syntactically easier to
+  # The tDOM attribute manager makes it syntactically easier to
   # specify a list of attributes for rendering via tDOM.
   #
   ::xotcl::Class create ::xo::tdom::AttributeManager
@@ -179,7 +179,7 @@ namespace eval ::xo::tdom {
   
   #
   # ::xo::tdom::Object
-  # is the top of the class hierarchies for tdom objects
+  # is the top of the class hierarchies for tDOM objects
   #
   ::xotcl::Class create ::xo::tdom::Object \
       -superclass {::xo::tdom::AttributeManager ::xo::OrderedComposite} \
@@ -187,6 +187,16 @@ namespace eval ::xo::tdom {
 
   ::xo::tdom::Object instproc render {} {
     foreach o [my children] { $o render }
+  }
+
+  #
+  # General of HTML markup CSRF tokens in tDOM contexts
+  #
+  namespace eval ::html {}
+  proc ::html::CSRFToken {} {
+    ::if {[::info exists ::__csrf_token]} {
+      ::html::input -type hidden -name __csrf_token -value [::security::csrf::token] {}
+    }
   }
 
 }
@@ -206,6 +216,29 @@ namespace eval ::xo {
   # Localization
   #
 
+  #
+  # The following pair of functions implement a crude method for
+  # avoiding i16n substitutions. These are necessary, since xowiki
+  # provides all its markup finally as "content" that is currently
+  # internationalized without distinctions. However, sometimes
+  # (e.g. values in forms) should be presented without i18n
+  # processing. In such cases, the two functions below can be used to
+  # prevent such substitutions.
+  #
+  proc remove_escapes {text} {
+    regsub -all \x01# $text "#" text
+    return $text
+  }
+  
+  proc escape_message_keys {text} {
+    regsub -all {(\#[a-zA-Z0-9_:-]+\.[a-zA-Z0-9_:-]+)\#} $text "\\1\x01#" text
+    return $text
+  }
+
+  #
+  # xo::localize function
+  #
+
   set ::xo::acs_lang_url [apm_package_url_from_key acs-lang]admin
 
   proc localize {text {inline 0}} {
@@ -214,21 +247,21 @@ namespace eval ::xo {
     if {![$obj exists __localizer]} {
       $obj set __localizer [list]
     }
-    if {[string first \x002 $text] == -1} {
+    if {[string first \x02 $text] == -1} {
       return $text
     } else {
       set return_text ""
       if {$inline} {
         # Attempt to move all message keys outside of tags
-        while { [regsub -all {(<[^>]*)(\x002\(\x001[^\x001]*\x001\)\x002)([^>]*>)} $text {\2\1\3} text] } {}
+        while { [regsub -all {(<[^>]*)(\x02\(\x01[^\x01]*\x01\)\x02)([^>]*>)} $text {\2\1\3} text] } {}
         
         # Attempt to move all message keys outside of <select>...</select> statements
-        regsub -all -nocase {(<option\s[^>]*>[^<]*)(\x002\(\x001[^\x001]*\x001\)\x002)([^<]*</option[^>]*>)} $text {\2\1\3} text
+        regsub -all -nocase {(<option\s[^>]*>[^<]*)(\x02\(\x01[^\x01]*\x01\)\x02)([^<]*</option[^>]*>)} $text {\2\1\3} text
         
-        while { [regsub -all -nocase {(<select[^>]*>[^<]*)(\x002\(\x001[^\x001]*\x001\)\x002)} $text {\2\1} text] } {}
+        while { [regsub -all -nocase {(<select[^>]*>[^<]*)(\x02\(\x01[^\x01]*\x01\)\x02)} $text {\2\1} text] } {}
       }
 
-      while {[regexp {^([^\x002]*)\x002\(\x001([^\x001]*)\x001\)\x002(.*)$} $text _ \
+      while {[regexp {^([^\x02]*)\x02\(\x01([^\x01]*)\x01\)\x02(.*)$} $text _ \
                   before key text]} {
         append return_text $before
         lassign [split $key .] package_key message_key
@@ -326,7 +359,7 @@ namespace eval ::xo {
         next
         my render_localizer
       }
-  
+   
   #
   # for the time being, just a proc
   #
@@ -411,7 +444,7 @@ namespace eval ::xo {
     foreach column [[self]::__columns children] {
       if {[$column exists no_csv]} continue
       set label [$column label]
-      if {[regexp {^#(.*)#$} $label _ message_key]} {
+      if {[regexp {^#([a-zA-Z0-9_:-]+\.[a-zA-Z0-9_:-]+)#$} $label _ message_key]} {
         set label [_ $message_key]
       }
       set value [string map {\" \\\" \n \r)} $label]
@@ -605,13 +638,17 @@ namespace eval ::xo::Table {
 
       html::ul -class compact {
         foreach ba $bulkactions {
+          set id [::xowiki::Includelet html_id $ba]
           html::li {
-            html::a -title [$ba tooltip] -class button -href # \
-                -onclick "acs_ListBulkActionClick('$name','[$ba url]'); return false;" \
+            html::a -title [$ba tooltip] -id $id -class button -href # \
                 {
                   html::t [$ba label]
                 }
           }
+          template::add_event_listener \
+              -id $id \
+              -preventdefault=false \
+              -script [subst {acs_ListBulkActionClick('$name','[$ba url]');}]
         }
       }
     }
@@ -794,11 +831,17 @@ namespace eval ::xo::Table {
     set name [my name]
     #my msg [my serialize]
     html::th -class list { 
-      html::input -type checkbox -name __bulkaction \
-          -onclick "acs_ListCheckAll('$name', this.checked)" \
+      html::input -type checkbox -name __bulkaction -id __bulkaction \
           -title "Mark/Unmark all rows"
+      ::html::CSRFToken
     }
+    template::add_body_script -script [subst {
+      document.getElementById('__bulkaction').addEventListener('click', function (event) {
+        acs_ListCheckAll('$name', this.checked);
+      }, false);
+    }]
   }
+  
   TABLE::BulkAction instproc render-data {line} {
     #my msg [my serialize]
     set name [my name]
@@ -921,8 +964,6 @@ namespace eval ::xo {
   #
   # templating and CSS
   #
-  set use_template_head 1
-
   Class create Page
   Page proc requireCSS {{-order 1} name} {
     set ::_xo_need_css($name) [expr {[array size ::_xo_need_css]+1000*$order}]
@@ -935,12 +976,7 @@ namespace eval ::xo {
     set ::_xo_need_js($name)  1
   }
   Page proc requireLink {-rel -type -title -href} {
-    if {$::xo::use_template_head} {
-      template::head::add_link -rel $rel -href $href -type $type -title $title
-    } else {
-      set key "rel='[ns_quotehtml $rel]' type='[ns_quotehtml $type]' title='[ns_quotehtml $title]' href='[ns_quotehtml $href]'"
-      set ::_xo_need_link($key) 1
-    }
+    template::head::add_link -rel $rel -href $href -type $type -title $title
   }
   Page proc set_property {name element value} {
     set ::xo_property_${name}($element) $value
@@ -964,59 +1000,31 @@ namespace eval ::xo {
   }
 
   Page proc header_stuff {} {
-    set result ""
-    if {$::xo::use_template_head} {
-      foreach style [my sort_keys_by_value [array get ::_xo_need_style]] {
-        template::head::add_style -style $style
-      }
-      set count 10
-      foreach file [my sort_keys_by_value [array get ::_xo_need_css]] {
-        template::head::add_css -href $file -media all -order [incr count]
-      }
-      if {[info exists ::_xo_js_order]} {
-        set statements ""
-        set order 10
-        foreach file $::_xo_js_order {
-          if {[string match "*;*" $file]} {
-            # it is not a file, but some javascipt statements
-            #append statements [string map {< "&lt;" > "&gt;"} $file] \n
-            append statements $file \n
-          } else {
-            template::head::add_script -src $file -type text/javascript -order [incr order]
-          }
-        }
-        if {$statements ne ""} {
-          template::head::add_script -script $statements -type text/javascript -order [incr order]
-        }
-      }
 
-      
-    } else {
-      foreach link [array names ::_xo_need_link] {
-        append result "<link $link>\n"
-      }
-      foreach style [my sort_keys_by_value [array get ::_xo_need_style]] {
-        append result "<style type='text/css'>$style</style>\n"
-      }
-      foreach file [my sort_keys_by_value [array get ::_xo_need_css]] {
-        append result "<link type='text/css' rel='stylesheet' href='$file' media='all' >\n"
-      }
-      if {[info exists ::_xo_js_order]} {
-        set statements ""
-        foreach file $::_xo_js_order {
-          if {[string match "*;*" $file]} {
-            # it is not a file, but some javascipt statements
-            append statements $file \n
-          } else {
-            append result "<script src='$file' type='text/javascript'></script>\n"
-          }
+    foreach style [my sort_keys_by_value [array get ::_xo_need_style]] {
+      template::head::add_style -style $style
+    }
+    set count 10
+    foreach file [my sort_keys_by_value [array get ::_xo_need_css]] {
+      template::head::add_css -href $file -media all -order [incr count]
+    }
+    if {[info exists ::_xo_js_order]} {
+      set statements ""
+      set order 10
+      foreach file $::_xo_js_order {
+        if {[string match "*;*" $file]} {
+          # it is not a file, but some javascipt statements
+          #append statements [string map {< "&lt;" > "&gt;"} $file] \n
+          append statements $file \n
+        } else {
+          template::head::add_script -src $file -type text/javascript -order [incr order]
         }
-        if {$statements ne ""} {
-          append result \n "<script type='text/javascript' >$statements</script>\n"
-        }
+      }
+      if {$statements ne ""} {
+        template::head::add_script -script $statements -type text/javascript -order [incr order]
       }
     }
-    return $result
+    return ""
   }
 }
 ::xo::library source_dependent

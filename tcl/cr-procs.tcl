@@ -17,6 +17,7 @@ namespace eval ::xo::db {
         {mime_type text/plain}
         {storage_type "text"}
         {folder_id -100}
+        {non_cached_instance_var_patterns {__*}}
       } -ad_doc {
         <p>The meta class CrClass serves for a class of applications that mostly 
         store information in the content repository and that use a few 
@@ -35,7 +36,7 @@ namespace eval ::xo::db {
 
         <p>Each content item can be retrieved either through the 
         general method 
-        <a href='proc-view?proc=%3a%3axo::db%3a%3aCrClass+proc+get_instance_from_db'>
+        <a href='/api-doc/proc-view?proc=::xo::db::CrClass+proc+get_instance_from_db'>
         CrClass get_instance_from_db</a> or through the "get_instance_from_db" method of 
         every subclass of CrItem.
 
@@ -48,8 +49,8 @@ namespace eval ::xo::db {
   #
 
   CrClass ad_proc get_object_type {
-    -item_id
-    {-revision_id 0}
+    -item_id:integer,required
+    {-revision_id:integer 0}
   } {
     Return the object type for an item_id or revision_id.
 
@@ -77,8 +78,9 @@ namespace eval ::xo::db {
   }
 
   CrClass ad_proc get_instance_from_db {
-    {-item_id 0}
-    {-revision_id 0}
+    {-item_id:integer 0}
+    {-revision_id:integer 0}
+    {-initialize:boolean true}
   } {
     Instantiate the live revision or the specified revision of an 
     CrItem. The XOTcl object is destroyed automatically on cleanup 
@@ -88,7 +90,7 @@ namespace eval ::xo::db {
   } { 
     set object_type [my get_object_type -item_id $item_id -revision_id $revision_id]
     set class [::xo::db::Class object_type_to_class $object_type]
-    return [$class get_instance_from_db -item_id $item_id -revision_id $revision_id]
+    return [$class get_instance_from_db -item_id $item_id -revision_id $revision_id -initialize $initialize]
   }
 
   CrClass ad_proc get_parent_id {
@@ -417,7 +419,7 @@ namespace eval ::xo::db {
     -item_id:required
     {-revision_id 0}
     -object:required
-    {-initialize true}
+    {-initialize:boolean true}
   } {
     Load a content item into the specified object. If revision_id is
     provided, the specified revision is returned, otherwise the live
@@ -472,12 +474,19 @@ namespace eval ::xo::db {
     }
     if {$revision_id} {
       $object set revision_id $revision_id
-      $object db_1row [my qn fetch_from_view_revision_id] "\
-       select [join $atts ,], i.parent_id \
-       from   [my set table_name]i n, cr_items i,acs_objects o \
-       where  n.revision_id = :revision_id \
-       and    i.item_id = n.item_id \
-       and    o.object_id = n.revision_id"
+
+      db_with_handle db {
+        set sql [::xo::dc prepare -handle $db -argtypes integer "\
+               select [join $atts ,], i.parent_id \
+               from   [my set table_name]i n, cr_items i,acs_objects o \
+               where  n.revision_id = :revision_id \
+               and    i.item_id = n.item_id \
+               and    o.object_id = n.revision_id"]
+        
+        set selection [db_exec 1row $db dbqd..cr-procs-fetch_object-from-revision_id $sql]
+      }
+      $object mset [ns_set array $selection]
+
     } else {
       # We fetch the creation_user and the modifying_user by returning the 
       # creation_user of the automatic view as modifying_user. In case of
@@ -485,6 +494,7 @@ namespace eval ::xo::db {
       lappend atts "n.creation_user as modifying_user"
       
       $object set item_id $item_id
+     
       $object db_1row [my qn fetch_from_view_item_id] "\
        select [join $atts ,], i.parent_id \
        from   [my set table_name]i n, cr_items i, acs_objects o \
@@ -510,6 +520,7 @@ namespace eval ::xo::db {
   CrClass ad_instproc get_instance_from_db {
     {-item_id 0}
     {-revision_id 0}
+    {-initialize:boolean true}
   } { 
     Retrieve either the live revision or a specified revision
     of a content item with all attributes into a newly created object.
@@ -524,7 +535,8 @@ namespace eval ::xo::db {
     set object ::[expr {$revision_id ? $revision_id : $item_id}]
     if {![my isobject $object]} {
       my fetch_object -object $object \
-          -item_id $item_id -revision_id $revision_id
+          -item_id $item_id -revision_id $revision_id \
+          -initialize $initialize
       $object destroy_on_cleanup
     }
     return $object
@@ -904,7 +916,7 @@ namespace eval ::xo::db {
     #my instvar creation_user
     set __atts [list creation_user]
     set __vars $__atts
-    
+
     # The modifying_user is not maintained by the CR (bug?)
     # xotcl-core handles this by having the modifying user as
     # creation_user of the revision.
@@ -930,11 +942,28 @@ namespace eval ::xo::db {
       lappend __vars $__slot_name
     }
 
+    if {$use_given_publish_date} {
+      if {"publish_date" ni $__atts} {
+        my instvar publish_date
+        lappend __atts publish_date
+        lappend __vars publish_date
+      }
+      set publish_date_flag [list -publish_date $publish_date]
+    } else {
+      set publish_date_flag ""
+    }
+    
     ::xo::dc transaction {
       [my info class] instvar storage_type
       set revision_id [xo::dc nextval acs_object_id_seq]
       if {$storage_type eq "file"} {
-        my instvar import_file
+        my instvar import_file mime_type name
+        # Get the mime_type from the file, eventually creating a new
+        # one if it's unrecognized.
+        set mime_type [cr_check_mime_type \
+                           -mime_type $mime_type \
+                           -filename  $name \
+                           -file      $import_file]
         set text [cr_create_content_file $item_id $revision_id $import_file]
       }
       ::xo::dc [::xo::dc insert-view-operation] revision_add \
@@ -943,17 +972,15 @@ namespace eval ::xo::db {
       my fix_content $revision_id $text
 
       if {$live_p} {
+        #
+        # Update the life revision with the publish status and
+        # optionally the publish_date
+        #
         ::xo::db::sql::content_item set_live_revision \
             -revision_id $revision_id \
-            -publish_status [my set publish_status]
-        #
-        # set_live revision updates publish_date to the current date.
-        # In order to keep a given publish date, we have to update the
-        # field manually.
-        #
-        if {$use_given_publish_date} {
-          my update_revision $revision_id publish_date [my publish_date]
-        }
+            -publish_status [my set publish_status] \
+            -is_latest true \
+            {*}$publish_date_flag
         my set revision_id $revision_id
         my update_item_index
       } else {
@@ -968,33 +995,18 @@ namespace eval ::xo::db {
     return $item_id
   }
 
-  if {[apm_version_names_compare [ad_acs_version] 5.2] > -1} {
-    ns_log notice "--OpenACS Version 5.2 or newer [ad_acs_version]"
-    CrItem set content_item__new_args {
-      -name $name -parent_id $parent_id -creation_user $creation_user \
-          -creation_ip $creation_ip \
-          -item_subtype "content_item" -content_type $object_type \
-          -description $description -mime_type $mime_type -nls_language $nls_language \
-          -is_live f -storage_type $storage_type -package_id $package_id
-    }
-  } else {
-    ns_log notice "--OpenACS Version 5.1 or older [ad_acs_version]"
-    CrItem set content_item__new_args {
-      -name $name -parent_id $parent_id -creation_user $creation_user \
-          -creation_ip $creation_ip \
-          -item_subtype "content_item" -content_type $object_type \
-          -description $description -mime_type $mime_type -nls_language $nls_language \
-          -is_live f -storage_type $storage_type
-    }
-  }
-
-  CrItem ad_instproc set_live_revision {-revision_id:required {-publish_status "ready"}} {
+  CrItem ad_instproc set_live_revision {
+    -revision_id:required
+    {-publish_status "ready"}
+    {-is_latest:boolean false}
+  } {
     @param revision_id
     @param publish_status one of 'live', 'ready' or 'production'
   } {
     ::xo::db::sql::content_item set_live_revision \
         -revision_id $revision_id \
-        -publish_status $publish_status
+        -publish_status $publish_status \
+        -is_latest $is_latest
     ::xo::clusterwide ns_cache flush xotcl_object_cache ::[my item_id]
     ::xo::clusterwide ns_cache flush xotcl_object_cache ::$revision_id
   }
@@ -1018,8 +1030,10 @@ namespace eval ::xo::db {
     @param creation_user user_id if the creating user
     @param live_p make this revision the live revision
   } {
+    
     set __class [my info class]
     my instvar parent_id item_id import_file name
+    
     if {![info exists package_id] && [my exists package_id]} {
       set package_id [my package_id]
     }
@@ -1041,6 +1055,17 @@ namespace eval ::xo::db {
       lappend __atts [$__slot column_name]
       lappend __vars $__slot_name
     }
+    
+    if {$use_given_publish_date} {
+      if {"publish_date" ni $__atts} {
+        my instvar publish_date
+        lappend __atts publish_date
+        lappend __vars publish_date
+      }
+      set publish_date_flag [list -publish_date $publish_date]
+    } else {
+      set publish_date_flag ""
+    }
 
     ::xo::dc transaction {
       $__class instvar storage_type object_type
@@ -1057,9 +1082,31 @@ namespace eval ::xo::db {
         set title [expr {[my exists __title_prefix] ? 
                          "[my set __title_prefix] ($name)" : $name}]
       }
-      #my msg --[subst [[self class] set content_item__new_args]]
-      set item_id [eval ::xo::db::sql::content_item new \
-                       [[self class] set content_item__new_args]]
+
+      if {$storage_type eq "file"} {
+        # Get the mime_type from the file, eventually creating a new
+        # one if it's unrecognized.
+        set mime_type [cr_check_mime_type \
+                           -mime_type $mime_type \
+                           -filename  $name \
+                           -file      $import_file]
+      }
+      
+      set item_id [::xo::db::sql::content_item new \
+                       -name            $name \
+                       -parent_id       $parent_id \
+                       -creation_user   $creation_user \
+                       -creation_ip     $creation_ip \
+                       -item_subtype    "content_item" \
+                       -content_type    $object_type \
+                       -description     $description \
+                       -mime_type       $mime_type \
+                       -nls_language    $nls_language \
+                       -is_live         f \
+                       -storage_type    $storage_type \
+                       -package_id      $package_id \
+                       -with_child_rels f]
+      
       if {$storage_type eq "file"} {
         set text [cr_create_content_file $item_id $revision_id $import_file]
       }
@@ -1069,12 +1116,15 @@ namespace eval ::xo::db {
       my fix_content $revision_id $text
 
       if {$live_p} {
+        #
+        # Update the life revision with the publish status and
+        # optionally the publish_date
+        #
         ::xo::db::sql::content_item set_live_revision \
             -revision_id $revision_id \
-            -publish_status [my set publish_status] 
-        if {$use_given_publish_date} {
-          my update_revision $revision_id publish_date [my publish_date]
-        }
+            -publish_status [my set publish_status] \
+            -is_latest true \
+            {*}$publish_date_flag
         my update_item_index
       }
     }
@@ -1101,6 +1151,7 @@ namespace eval ::xo::db {
     my instvar item_id
     ::xo::dc dml update_rename \
         "update cr_items set name = :new_name where item_id = :item_id"
+    my set name $new_name
     my update_item_index
   }
 
@@ -1115,7 +1166,7 @@ namespace eval ::xo::db {
     return ""
   }
 
-  CrItem instproc revisions {} {
+  CrItem instproc www-revisions {} {
 
     set isAdmin [acs_user::site_wide_admin_p]
 
@@ -1155,10 +1206,7 @@ namespace eval ::xo::db {
                         content_revision__get_number(r.revision_id) as version_number " \
                  -from  "cr_items ci, cr_revisions r, acs_objects o" \
                  -where "ci.item_id = :page_id and r.item_id = ci.item_id and o.object_id = r.revision_id 
-             and exists (select 1 from acs_object_party_privilege_map m
-                         where m.object_id = r.revision_id
-                          and m.party_id = :user_id
-                          and m.privilege = 'read')" \
+                         and acs_permission__permission_p(r.revision_id, :user_id, 'read')" \
                  -orderby "r.revision_id desc"]
     
     ::xo::dc foreach revisions_select $sql {
@@ -1302,7 +1350,7 @@ namespace eval ::xo::db {
   # 
   # We should provide either a minimal parameter page for this
   # purposes, or - more conservative - provide simply package
-  # parameters for this. The only thing we are loosing are "computed
+  # parameters for this. The only thing we are losing are "computed
   # parameters", what most probably no-one uses. The delegation based
   # parameters are most probably good replacement to manage such
   # parameters site-wide.
@@ -1401,6 +1449,7 @@ namespace eval ::xo::db {
   ::xo::db::CrFolder ad_proc get_instance_from_db {
     {-item_id 0}
     {-revision_id 0}
+    {-initialize:boolean true}
   } {
     The "standard" get_instance_from_db methods return objects following the
     naming convention "::<acs_object_id>", e.g. ::1234
@@ -1415,7 +1464,7 @@ namespace eval ::xo::db {
   } {
     set object ::cr_folder$item_id
     if {![my isobject $object]} {
-      my fetch_object -object $object -item_id $item_id
+      my fetch_object -object $object -item_id $item_id -initialize $initialize
       $object destroy_on_cleanup
     }
     return $object
@@ -1441,7 +1490,7 @@ namespace eval ::xo::db {
     -item_id:required
     {-revision_id 0}
     -object:required
-    {-initialize true}
+    {-initialize:boolean true}
   } {
     We overwrite the default fetch_object method here.
     We join acs_objects, cr_items and cr_folders and fetch
@@ -1531,7 +1580,7 @@ namespace eval ::xo::db {
     -item_id:required
     {-revision_id 0}
     -object:required
-    {-initialize true}
+    {-initialize:boolean true}
   } {
     set serialized_object [ns_cache eval xotcl_object_cache $object {
       #my log "--CACHE true fetch [self args], call shadowed method [self next]" 
@@ -1593,29 +1642,45 @@ namespace eval ::xo::db {
 
   ::xotcl::Class create CrCache::Item
   CrCache::Item set name_pattern {^::[0-9]+$}
+  
   CrCache::Item instproc remove_non_persistent_vars {} {
-    # we do not want to save __db__artefacts in the cache
-    foreach x [my info vars __db_*] {my unset $x}
-    # remove as well vars and array starting with "__", assuming these
-    # are volatile variables created by initialize_loaded_object or
-    # similar mechanisms
+    #
+    # Do not save __db__artefacts in the cache.
+    #
+    foreach x [info vars :__db_*] {
+      unset :$x
+    }
+    #
+    # Remove vars and arrays matching the class-specific specified
+    # non_cached_instance_var_patterns and treat these as variables,
+    # which are not stored in the cache, but which are kept in the
+    # instance variables. These variables are removed before caching
+    # and restored afterwards.
+    #
     set arrays {}
     set scalars {}
-    foreach x [my info vars __*] {
-      if {[my array exists $x]} {
-        lappend arrays $x [my array get $x]
-        my array unset $x
+    set non_cached_vars {}
+    foreach pattern [[my info class] non_cached_instance_var_patterns] {
+      lappend non_cached_vars {*}[info vars :$pattern]
+    }
+    
+    #puts stderr "pattern [[my info class] non_cached_instance_var_patterns], non_cached_vars=$non_cached_vars"
+    foreach x $non_cached_vars {
+      if {[array exists :$x]} {
+        lappend arrays $x [array get :$x]
+        array unset :$x
       } {
-        lappend scalars $x [my set $x]
-        my unset $x
+        lappend scalars $x [set :$x]
+        unset :$x
       }
     }
     return [list $arrays $scalars]
   }
+  
   CrCache::Item instproc set_non_persistent_vars {vars} {
     lassign $vars arrays scalars
     foreach {var value} $arrays {my array set $var $value}
-    foreach {var value} $scalars {my set $var $value}
+    :mset $scalars
   }
   CrCache::Item instproc flush_from_cache_and_refresh {} {
     # cache only names with IDs
